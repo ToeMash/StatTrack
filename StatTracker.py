@@ -22,15 +22,21 @@ def save_custom_sets(filename, custom_sets):
     with open(filename, 'w') as file:
         json.dump(custom_sets, file)
 
+def load_points_of_interest(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as file:
+            return json.load(file)
+    return []
+
+def save_points_of_interest(filename, points_of_interest):
+    with open(filename, 'w') as file:
+        json.dump(points_of_interest, file)
+
 # Load the challenges from the JSON file
 voltaic_challenges = load_voltaic_challenges('voltaic_challenges.json')
 
-# Add "All" category by combining all difficulties for each season
-for season in voltaic_challenges:
-    all_challenges = []
-    for level in voltaic_challenges[season]:
-        all_challenges.extend(voltaic_challenges[season][level])
-    voltaic_challenges[season]["All"] = all_challenges
+# Load points of interest
+points_of_interest = load_points_of_interest('points_of_interest.json')
 
 def parse_stat_sheet(file_path):
     with open(file_path, 'r') as file:
@@ -148,6 +154,11 @@ def plot_scores_for_challenges(directory_path, selected_challenges, show_pb=Fals
             else:
                 plt.plot(df_challenge['Datetime'], df_challenge['Score'], marker='o', label=challenge)
 
+    # Draw vertical lines for points of interest
+    for poi in points_of_interest:
+        poi_date = datetime.strptime(poi['date'], '%Y-%m-%d')
+        plt.axvline(x=poi_date, color='red', linestyle='--', label=poi['name'])
+
     plt.title('Scores Over Time')
     plt.xlabel('Date and Time')
     plt.ylabel('Score' + (' (Normalized)' if normalize else ''))
@@ -216,19 +227,21 @@ def on_plot_scores():
 
 def select_voltaic_challenge(season, level):
     # Track selected season-level pairs
-    selected_pairs.add((season, level))
+    if level == "All":
+        for difficulty in ["Novice", "Intermediate", "Advanced"]:
+            select_voltaic_challenge(season, difficulty)
+    else:
+        selected_pairs.add((season, level))
+        # Get challenges for the selected season and level
+        selected_challenges = voltaic_challenges.get(season, {}).get(level, [])
+        # Select the challenges in the listbox
+        for challenge in selected_challenges:
+            for i, item in enumerate(all_challenges):
+                if item == challenge:
+                    challenge_listbox.selection_set(i)
 
-    # Get challenges for the selected season and level
-    selected_challenges = voltaic_challenges.get(season, {}).get(level, [])
-
-    # Select the challenges in the listbox
-    for challenge in selected_challenges:
-        for i, item in enumerate(all_challenges):
-            if item == challenge:
-                challenge_listbox.selection_set(i)
-
-    # Update the selected benchmarks label
-    update_selected_benchmarks_label()
+        # Update the selected benchmarks label
+        update_selected_benchmarks_label()
 
 def update_selected_benchmarks_label():
     # Format the selected pairs as "[Season]-[Difficulty]"
@@ -457,6 +470,52 @@ def modify_or_delete_custom_set():
     delete_button = Button(modify_delete_window, text="Delete Set", command=delete_set)
     delete_button.pack(pady=5)
 
+def add_point_of_interest():
+    name = simpledialog.askstring("Input", "Enter the name of the point of interest:")
+    date = simpledialog.askstring("Input", "Enter the date (YYYY-MM-DD):")
+    if name and date:
+        points_of_interest.append({'name': name, 'date': date})
+        save_points_of_interest('points_of_interest.json', points_of_interest)
+        update_points_of_interest_listbox()
+
+def delete_point_of_interest():
+    # Create a new window to select POIs to delete
+    delete_poi_window = Toplevel(root)
+    delete_poi_window.title("Delete Point of Interest")
+
+    # Frame for listbox and buttons
+    listbox_frame = tk.Frame(delete_poi_window)
+    listbox_frame.pack(pady=10)
+
+    # Create a listbox to display existing POIs
+    poi_listbox = Listbox(listbox_frame, selectmode=tk.MULTIPLE)
+    poi_listbox.pack(side=tk.LEFT, padx=5, pady=10, fill=tk.BOTH, expand=True)
+
+    # Populate the listbox with existing POIs
+    for poi in points_of_interest:
+        poi_listbox.insert(tk.END, f"{poi['name']} - {poi['date']}")
+
+    def delete_selected_pois():
+        selected_indices = poi_listbox.curselection()
+        if not selected_indices:
+            messagebox.showwarning("Warning", "No point of interest selected. Please select a point of interest to delete.")
+            return
+        for i in reversed(selected_indices):  # Iterate in reverse to avoid index shifting issues
+            points_of_interest.pop(i)
+        save_points_of_interest('points_of_interest.json', points_of_interest)
+        update_points_of_interest_listbox()
+        delete_poi_window.destroy()
+
+    # Button to delete selected POIs
+    delete_button = Button(delete_poi_window, text="Delete Selected POIs", command=delete_selected_pois)
+    delete_button.pack(pady=5)
+
+def update_points_of_interest_listbox():
+    points_of_interest_listbox.delete(0, tk.END)
+    for poi in points_of_interest:
+        points_of_interest_listbox.insert(tk.END, f"{poi['name']} - {poi['date']}")
+    points_of_interest_listbox.config(state='disabled')  # Disable the listbox
+
 # Create the main application window
 root = tk.Tk()
 root.title("Stats Plotter")
@@ -557,6 +616,25 @@ aggregate_checkbox.pack(side=tk.LEFT, padx=5)
 # Create a button to plot the scores
 plot_button = tk.Button(root, text="Plot Scores", command=on_plot_scores)
 plot_button.pack(pady=10)
+
+# Frame for Points of Interest
+poi_frame = tk.Frame(root)
+poi_frame.pack(pady=10)
+
+# Create a listbox to display points of interest
+points_of_interest_listbox = Listbox(poi_frame, selectmode=tk.MULTIPLE, height=5)
+points_of_interest_listbox.pack(side=tk.LEFT, padx=5, pady=10, fill=tk.BOTH, expand=True)
+
+# Button to add a new point of interest
+add_poi_button = tk.Button(poi_frame, text="Add Point of Interest", command=add_point_of_interest)
+add_poi_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+# Button to delete selected points of interest
+delete_poi_button = tk.Button(poi_frame, text="Delete Point of Interest", command=delete_point_of_interest)
+delete_poi_button.pack(side=tk.LEFT, padx=5, pady=10)
+
+# Update the points of interest listbox
+update_points_of_interest_listbox()
 
 # Run the main event loop
 root.mainloop()
