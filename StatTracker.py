@@ -55,7 +55,12 @@ def parse_stat_sheet(file_path):
     score = float(score_match.group(1).strip())
 
     # Extract time from challenge start
-    challenge_time = datetime.strptime(challenge_start, '%H:%M:%S.%f').time()
+    challenge_time = False
+    try:
+        challenge_time = datetime.strptime(challenge_start, '%H:%M:%S.%f').time()
+    except:
+        # print("Unable to parse challenge start: " + str(challenge_start))
+        return None, False, None
 
     # Use the file's modification date as the date
     modification_time = os.path.getmtime(file_path)
@@ -89,7 +94,19 @@ def plot_scores_for_challenges(directory_path, selected_challenges, show_pb=Fals
     }
 
     # Iterate over each file in the directory
-    for filename in os.listdir(directory_path):
+    # for filename in os.listdir(directory_path):
+    #     file_path = os.path.join(directory_path, filename)
+    #     if os.path.isfile(file_path):
+    #         datetime_value, challenge, score = parse_stat_sheet(file_path)
+    #         if datetime_value is not None and challenge in selected_challenges:
+    #             data['Datetime'].append(datetime_value)
+    #             data['Challenge'].append(challenge)
+    #             data['Score'].append(score)
+
+
+
+    # Iterate through selected challenges
+    for filename in list(filter(lambda challenge_file: challenge_file[:challenge_file.rfind("Challenge")-3].strip() in selected_challenges, os.listdir(directory_path))):
         file_path = os.path.join(directory_path, filename)
         if os.path.isfile(file_path):
             datetime_value, challenge, score = parse_stat_sheet(file_path)
@@ -97,6 +114,7 @@ def plot_scores_for_challenges(directory_path, selected_challenges, show_pb=Fals
                 data['Datetime'].append(datetime_value)
                 data['Challenge'].append(challenge)
                 data['Score'].append(score)
+
 
     df = pd.DataFrame(data)
     df.sort_values(by='Datetime', inplace=True)
@@ -228,8 +246,12 @@ def on_plot_scores():
 def select_voltaic_challenge(season, level):
     # Track selected season-level pairs
     if level == "All":
-        for difficulty in ["Novice", "Intermediate", "Advanced"]:
-            select_voltaic_challenge(season, difficulty)
+        if season == "Season 3":
+            for difficulty in ["Intermediate", "Advanced"]:
+                select_voltaic_challenge(season, difficulty)
+        else:
+            for difficulty in ["Novice", "Intermediate", "Advanced"]:
+                select_voltaic_challenge(season, difficulty)
     else:
         selected_pairs.add((season, level))
         # Get challenges for the selected season and level
@@ -549,6 +571,12 @@ search_button.pack(side=tk.LEFT)
 menu_button = tk.Menubutton(search_frame, text="Voltaic Benchmarks", relief=tk.RAISED)
 menu = Menu(menu_button, tearoff=0)
 menu_button.config(menu=menu)
+
+#Add Season 3 and Levels to the menu
+submenu_s3 = Menu(menu, tearoff=0)
+for level in ["Intermediate", "Advanced", "All"]:
+        submenu_s3.add_command(label=level, command=lambda s="Season 3", l=level: select_voltaic_challenge(s, l))
+menu.add_cascade(label="Season 3", menu=submenu_s3)
 
 # Add Seasons and Levels to the menu
 for season in ["Season 4", "Season 5"]:
